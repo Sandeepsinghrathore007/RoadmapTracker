@@ -1314,7 +1314,7 @@ export default function App() {
                 ? "Saving..."
                 : saveStatus === "error"
                   ? "Save failed"
-                  : "Saved locally"}
+                  : "Saved"}
             </span>
             <button
               onClick={() => setConfirmModal({ type: "all" })}
