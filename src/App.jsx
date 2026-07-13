@@ -504,15 +504,7 @@ const MASTER_SKILLS = [
   "Resume writing, LinkedIn presence, interview communication",
 ];
 
-const POSTPONE_SKILLS = [
-  "Active Directory exploitation depth (Kerberoasting, lateral movement)",
-  "OSCP-level binary exploitation / buffer overflows",
-  "Live bug bounty hunting for money",
-  "Cloud security depth (AWS/Azure)",
-  "Malware reverse engineering",
-  "Any paid certification (Security+, eJPT, PNPT, OSCP) — optional, never a gate",
-  "Mobile security, hardware hacking, HTB hard/insane-rated boxes",
-];
+
 
 const PHASES = [
   { id: "build", name: "Skill + Portfolio Build", range: [1, 10] },
@@ -959,17 +951,7 @@ function DoctrinePanel() {
               ))}
             </ul>
           </div>
-          <div>
-            <p className="text-red-400 text-[11px] mb-2">POSTPONE (until after Month 7 — do not touch)</p>
-            <ul className="space-y-1.5">
-              {POSTPONE_SKILLS.map((s, i) => (
-                <li key={i} className="text-[11px] text-zinc-500 flex gap-1.5">
-                  <span className="text-red-400/70 flex-shrink-0">✕</span>
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          
         </div>
       )}
     </div>
