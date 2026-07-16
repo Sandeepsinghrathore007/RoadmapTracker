@@ -557,8 +557,18 @@ const DEFAULT_STATE = {
 
 function todayStr() {
   const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  // Do not use toISOString here: it converts local midnight to UTC and can
+  // store yesterday's date in time zones ahead of UTC.
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function dateFromKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function computeXP(state) {
@@ -589,14 +599,14 @@ function calcStreak(dailyLog) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const mostRecent = new Date(dates[dates.length - 1]);
+  const mostRecent = dateFromKey(dates[dates.length - 1]);
   const gapFromToday = Math.round((today - mostRecent) / 86400000);
   if (gapFromToday > 1) return 0; // streak broken (a full day was skipped)
 
   let count = 1;
   for (let i = dates.length - 1; i > 0; i--) {
-    const cur = new Date(dates[i]);
-    const prev = new Date(dates[i - 1]);
+    const cur = dateFromKey(dates[i]);
+    const prev = dateFromKey(dates[i - 1]);
     const diff = Math.round((cur - prev) / 86400000);
     if (diff === 1) count++;
     else break;
