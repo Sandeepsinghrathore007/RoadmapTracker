@@ -539,9 +539,14 @@ const LEVELS = [
 ];
 
 const STORAGE_KEY = "cyberquest-tracker-state";
+// Rebase the existing tracker once so 8 Aug 2026 is Week 2, Day 3 (Day 10).
+// Future days continue from this date normally; completed progress is retained.
+const TIMELINE_REBASE_VERSION = 1;
+const TIMELINE_REBASE_START_DATE = "2026-07-30";
 
 const DEFAULT_STATE = {
   startDate: null,
+  timelineRebaseVersion: TIMELINE_REBASE_VERSION,
   tasks: {}, // "w{week}-d{day}": true
   kpi: {}, // "w{week}": true
   exit: {}, // "w{week}": true
@@ -1136,11 +1141,25 @@ export default function App() {
   const [saveError, setSaveError] = useState(false);
   const [saveStatus, setSaveStatus] = useState("idle");
   const hydratedRef = useRef(false);
+  const rebasePendingRef = useRef(false);
 
   // Load state
   useEffect(() => {
     const savedState = loadTrackerState(STORAGE_KEY, null);
-    setState(savedState ? { ...DEFAULT_STATE, ...savedState } : DEFAULT_STATE);
+    const nextState = savedState ? { ...DEFAULT_STATE, ...savedState } : DEFAULT_STATE;
+
+    // Keep all tracked work intact while moving the roadmap calendar to its
+    // requested Week 2 / Day 3 baseline. This runs only once per browser.
+    if (
+      savedState &&
+      (savedState.timelineRebaseVersion || 0) < TIMELINE_REBASE_VERSION
+    ) {
+      nextState.startDate = TIMELINE_REBASE_START_DATE;
+      nextState.timelineRebaseVersion = TIMELINE_REBASE_VERSION;
+      rebasePendingRef.current = true;
+    }
+
+    setState(nextState);
     setLoaded(true);
   }, []);
 
@@ -1148,8 +1167,11 @@ export default function App() {
     if (!loaded || !state) return;
     if (!hydratedRef.current) {
       hydratedRef.current = true;
-      setSaveStatus("saved");
-      return;
+      if (!rebasePendingRef.current) {
+        setSaveStatus("saved");
+        return;
+      }
+      rebasePendingRef.current = false;
     }
 
     setSaveStatus("saving");
