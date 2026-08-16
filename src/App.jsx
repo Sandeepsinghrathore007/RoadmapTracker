@@ -1591,8 +1591,22 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState(null); // { type: 'all'|'week', week? }
   const [saveError, setSaveError] = useState(false);
   const [saveStatus, setSaveStatus] = useState("idle");
+  const [backupMenuOpen, setBackupMenuOpen] = useState(false);
+  const backupMenuRef = useRef(null);
+  const fileInputRef = useRef(null);
   const hydratedRef = useRef(false);
   const rebasePendingRef = useRef(false);
+
+  // Close backup menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (backupMenuRef.current && !backupMenuRef.current.contains(event.target)) {
+        setBackupMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const activeConfig = ROADMAP_CONFIGS[activeRoadmap] || ROADMAP_CONFIGS.cybersecurity;
   const MONTHS = activeConfig.months;
@@ -1756,6 +1770,96 @@ export default function App() {
     });
   };
 
+  const handleExportAll = () => {
+    setBackupMenuOpen(false);
+    if (state && activeConfig) {
+      saveTrackerState(activeConfig.storageKey, state);
+    }
+
+    const cyberState = loadTrackerState("cyberquest-tracker-state", null);
+    const iaGkState = loadTrackerState("cyberquest-ia-gk-tracker-state", null);
+
+    const backupData = {
+      app: "cyberquest-tracker",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      activeRoadmap: activeRoadmap,
+      data: {
+        cybersecurity: cyberState || (activeRoadmap === "cybersecurity" ? state : null),
+        ia_gk: iaGkState || (activeRoadmap === "ia_gk" ? state : null),
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.href = url;
+    downloadAnchor.download = `cyberquest_progress_backup_${todayStr()}.json`;
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+    URL.revokeObjectURL(url);
+
+    setToast("📁 All roadmap progress exported successfully!");
+  };
+
+  const triggerFileInput = () => {
+    setBackupMenuOpen(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileImport = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result;
+        if (!content || typeof content !== "string") {
+          throw new Error("Invalid file content");
+        }
+        const parsed = JSON.parse(content);
+
+        // Format 1: Full multi-roadmap backup
+        if (parsed.data && (parsed.data.cybersecurity || parsed.data.ia_gk)) {
+          if (parsed.data.cybersecurity) {
+            saveTrackerState("cyberquest-tracker-state", parsed.data.cybersecurity);
+          }
+          if (parsed.data.ia_gk) {
+            saveTrackerState("cyberquest-ia-gk-tracker-state", parsed.data.ia_gk);
+          }
+          if (parsed.activeRoadmap && ROADMAP_CONFIGS[parsed.activeRoadmap]) {
+            localStorage.setItem(ACTIVE_ROADMAP_STORAGE_KEY, parsed.activeRoadmap);
+            setActiveRoadmap(parsed.activeRoadmap);
+            const restoredState = loadStateForRoadmap(parsed.activeRoadmap);
+            setState(restoredState);
+          } else {
+            const restoredState = loadStateForRoadmap(activeRoadmap);
+            setState(restoredState);
+          }
+          setToast("🎉 Progress for all roadmaps imported successfully!");
+          setConfetti(true);
+        } else if (parsed.tasks || parsed.startDate || parsed.dailyLog) {
+          // Format 2: Direct single-roadmap state backup
+          saveTrackerState(activeConfig.storageKey, parsed);
+          setState({ ...DEFAULT_STATE, ...parsed });
+          setToast(`🎉 Progress for ${activeConfig.title} imported successfully!`);
+          setConfetti(true);
+        } else {
+          throw new Error("Unrecognized backup file format");
+        }
+      } catch (err) {
+        console.error("Import error:", err);
+        setToast("❌ Failed to import: Invalid JSON backup file");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const doResetWeek = (week) => {
     updateState((prev) => {
       const draft = { ...prev, tasks: { ...prev.tasks }, kpi: { ...prev.kpi }, exit: { ...prev.exit } };
@@ -1838,6 +1942,61 @@ export default function App() {
               <option value="cybersecurity">🛡️ Cybersecurity (6M)</option>
               <option value="ia_gk">🎯 RSMSSB (4M)</option>
             </select>
+
+            {/* Backup & Restore Dropdown */}
+            <div className="relative" ref={backupMenuRef}>
+              <button
+                onClick={() => setBackupMenuOpen((o) => !o)}
+                title="Backup & Restore Progress"
+                className="flex items-center gap-1.5 bg-zinc-900 text-zinc-300 hover:text-cyan-300 font-mono text-xs border border-zinc-700 hover:border-zinc-500 rounded px-2 py-1 focus:outline-none transition-colors"
+              >
+                <svg className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                <span className="hidden sm:inline">Backup</span>
+                <span className="text-[9px] text-zinc-500">▾</span>
+              </button>
+
+              {backupMenuOpen && (
+                <div className="absolute right-0 mt-1.5 w-56 bg-zinc-900 border border-zinc-700 rounded-md shadow-2xl py-1 z-50 text-xs font-mono">
+                  <div className="px-3 py-1.5 border-b border-zinc-800 text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+                    Progress Backup & Sync
+                  </div>
+                  <button
+                    onClick={handleExportAll}
+                    className="w-full text-left px-3 py-2 text-zinc-200 hover:bg-zinc-800 hover:text-emerald-300 flex items-center gap-2 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    <span>Export Progress (.json)</span>
+                  </button>
+                  <button
+                    onClick={triggerFileInput}
+                    className="w-full text-left px-3 py-2 text-zinc-200 hover:bg-zinc-800 hover:text-cyan-300 flex items-center gap-2 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                    <span>Import Progress (.json)</span>
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileImport}
+                className="hidden"
+              />
+            </div>
 
             <span
               className={`text-[11px] px-2 py-1 rounded border ${
